@@ -1,0 +1,384 @@
+#!/usr/bin/env python
+import json, os, requests, sys, subprocess
+
+# Note to use: change this path to whatever you rename your .ini to
+INI_FILE = "./myrepo.ini"
+
+class Log:
+    """
+        Colored printouts
+    """
+    def error(self, msg): print("\033[31mError: %s\033[0m" % msg)
+    def note(self, msg): print("\033[34m%s\033[0m" % msg)
+    def success(self, msg): print("\033[32m%s\033[0m" % msg)
+    def warn(self, msg): print("\033[35mWarning: %s\033[0m" % msg)
+
+class ConfigParser:
+    """
+        Very simple parser for the .ini file.
+    """
+    def __init__(self, filename):
+        self.config_filename = filename
+
+    def to_dict(self):
+        config_dict = {}
+        with open(self.config_filename, 'r') as config_file:
+            for line in config_file:
+                stripped = line.strip()
+                if " = " in stripped:
+                    # Add data to config dictionary. Everything is strings
+                    key, val = stripped.split(" = ", 1)
+                    config_dict[key] = val
+        return config_dict
+
+class Git:
+    """
+        Wrapper for executing git commands. 
+        Could benefit from more fancy stuff with the git-dir.
+    """
+
+    def __init__(self, config):
+        self.git_dir = config['github.home']
+
+    def command(self, cmd):
+        fullCommand = "git --git-dir=%s/.git %s" % (self.git_dir, cmd)
+        print "> %s" % fullCommand
+        try: 
+            output = subprocess.check_output(fullCommand, shell=True)
+            return "\n".join(line for line in output.split("\n") if line)
+        except subprocess.CalledProcessError as cpe: 
+            print "Failed to execute 'git %s'" % cmd
+            exit(1)
+
+class GithubApi:
+    """
+        Interfacing with github
+    """
+
+    def __init__(self, config):
+        """
+            2013-09-02:
+                Read in the config file. This is a very simple parser.
+        """
+        self.api_url = "https://api.github.com/repos/%s/%s" % \
+            (config['github.owner'], config['github.repo'])
+        self.github_token = config['github.token']
+    
+    def eraseLabel(self, issue_number, label):
+        url = "%s/issues/%s/labels/%s" % (self.api_url, issue_number, label)
+        return self.getResponse(url, data="DELETE")
+    
+    def getIssueData(self, issue_number):
+        url = "%s/issues/%s" % (self.api_url, issue_number)
+        return self.getResponse(url)
+
+    def getPullRequests(self):
+        url = "%s/pulls" % self.api_url
+        return self.getResponse(url)
+
+    def getResponse(self, url, data=None):
+        # Add access token to url
+        url = "%s?access_token=%s" % (url, self.github_token)
+        if data is None:
+            response = requests.get(url)
+        elif data=="DELETE":
+            # 2013-08-12: This is a bit of a hack
+            response = requests.delete(url)
+        else: 
+            # 2013-08-12: Post request. This is a more acceptable hack.
+            response = requests.post(url, data=json.dumps(data))
+        if 200 <= response.status_code <= 299:
+            return response.json()
+        else:
+            print("ERROR: Failed to get response from github api for url %s" % url)
+
+    def postLabel(self, issue_number, data):
+        url = "%s/issues/%s/labels" % (self.api_url, issue_number)
+        return self.getResponse(url, data)
+
+    def postPullRequest(self, data):
+        url = "%s/pulls" % self.api_url
+        return self.getResponse(url, data)
+
+class Work:
+    """
+        Dispatch for the actual commands. checkout, commit, review, close, etc
+    """
+
+    def __init__(self, config):
+        self.config = config
+        self.git = Git(self.config)
+        self.log = Log()
+
+    def add(self, pattern, options=[]):
+        """
+            Do a find for the filename before adding. 
+        """
+        added = False
+        found_str = subprocess.check_output("find . -name '%s*'" % pattern, shell=True)
+        files_added = []
+        for fname in found_str.split("\n"):
+            try:
+                if fname: 
+                    self.git.command("add %s %s" % (" ".join(options), fname))
+                    files_added.append(fname)
+                    added = True
+            except:
+                # Do not fail on failed attempt to add a file. Just ignore it.
+                pass
+        if added:
+            self.log.success("Successfully staged the changes to the following files:")
+            self.log.note("> %s" % "\n> ".join(files_added))
+        else:
+            self.log.note("Did not add anything")
+
+    def commit(self, message, options=[]):
+        """
+            Automatically prepend issue number to commit message
+        """
+        commit_message = "\"#%s %s\"" % (self.issue, message)
+        self.log.note("About to commit:") 
+        print(commit_message)
+        self.log.note("to %s. Is this correct? (y / n)" % (self.currentBranch))
+        answer = raw_input()
+        while answer not in ['y', 'n']:
+            print("Please answer 'y' or 'n'")
+            answer = raw_input()
+        if answer == 'y':
+            self.git.command("commit %s -m %s" % (" ".join(options), commit_message))
+            self.log.success("Success!")
+        else:
+            self.log.note("Commit aborted")
+
+    def close(self):
+        """
+            All done with the issue. Merge into the parent. 
+        """
+        # Merge
+        self.git.command("checkout %s" % self.target)
+        self.git.command("merge --no-ff -m \"MERGING #%s INTO %s MADE BY git311\" %s" % (self.issue, self.target, self.currentBranch))
+        # Manage labels
+        self.api.eraseLabel(self.issue, "pending-review")
+        self.api.postLabel(self.issue, data=['resolved'])
+        # Push to origin
+        self.git.command("push origin")
+        # Party!
+        self.log.success("=== Issue Resolved ===")
+
+    def checkout(self, issue_number, pull=False):
+        """
+            Find and check out the correct issue branch. 
+        """
+        issue_data = self.api.getIssueData(issue_number)
+        if issue_data is None:
+            self.log.error("Checkout failed. Could not retrieve issue data for issue number #%s" % issue_number)
+            exit(1)
+        title = issue_data['title']
+        target = self._getTarget(issue_data)
+        branch = "-".join([target, issue_number])
+        if branch == self.currentBranch:
+            self.log.warn("Already on branch '%s'. Exiting..." % branch) 
+        if branch in self.branches or "remotes/origin/%s" % branch in self.branches:
+            if pull:
+                self.pull(True, branch)
+            else:
+                self.git.command("checkout %s" % branch)
+        else:
+            # Check if the target branch exists locally. If not, create it.
+            if target not in self.branches:
+                self.log.note("Creating new branch origin/%s" % target)
+                self.git.command("checkout -b %s" % target)
+            # Sync target
+            self.pull(True, target)
+            # Create new issue branch
+            self.git.command("checkout -b %s" % branch)
+        self.log.success("Successfully checked out Issue #%s: %s" % (issue_number, title))
+        self.log.note("Target: %s" % target)
+
+    def pull(self, full, target):
+        # TODO is 'target' ever NOT the current branch?
+        previous = None
+        for issue in self._dependencies(full, target):
+            self.log.note("Merging with origin/%s..." % issue)
+            self.git.command("checkout %s" % issue)
+            if ("remotes/origin/%s" % issue) in self.branches:
+                self.git.command("merge origin/%s" % issue)
+            else:
+                self.log.note("Nothing in origin to sync")
+            if previous:
+                self.git.command("merge %s" % previous)
+            previous = issue
+
+    def push(self, full):
+        target = self.currentBranch
+        self.pull(full, self.currentBranch)
+        for issue in self._dependencies(full, self.currentBranch):
+            self.git.command('checkout %s' % issue)
+            self.git.command('push origin %s' % issue)
+
+    def printHelp(self):
+        self.log.note("Usage: git6820 <command> [options] <params>")
+        
+    def review(self):
+        """
+            Create a pull request for the current issue, or update the existing
+        """
+        title = "#%s -> %s" % (self.issue, self.target)
+        pulls = self.api.getPullRequests()
+        current = [pull for pull in pulls if pull['title'] == title]
+        if current:
+            self.log.note("Pull request already exists.")
+            link = current[0]['_links']['html']['href']
+        else:
+            newPullRequest = {
+                'title': title,
+                'base': self.target,
+                'head': self.currentBranch,
+                'body': title
+            }
+            pull = self.api.postPullRequest(newPullRequest)
+            link = pull['issue_url']
+        self.api.postLabel(self.issue, data=['pending-review'])
+        self.log.success("Review posted successfully")
+        self.log.success(link)
+
+    def run(self, args):
+        """
+            Main method
+        """
+        if not args:
+            self.printHelp()
+        else:
+            command = args[0]
+            if command in self.COMMANDS.keys():
+                self.COMMANDS[command](self, *args[1:])
+            else:
+                self.log.error("ERROR: Unknown command '%s'" % command)
+
+    def setUp(self):
+        """
+            Fetch refs, get a list of branches, get current issue.
+
+            This could be done in __init__, but I prefer deferring the computation.
+        """
+        self.git.command("fetch")
+        self.setUpBranches()
+        if "-" in self.currentBranch:
+            self.target, self.issue = self.currentBranch.split("-", 1)
+        else:
+            self.target = self.currentBranch
+            self.issue = None
+        self.api = GithubApi(self.config)
+
+    def setUpBranches(self):
+        """
+            Find current branch and all existing branches
+        """
+        branchLines = self.git.command("branch -a").split("\n") + ["remotes/origin/master"]
+        self.branches = []
+        for branch in branchLines:
+            branch = branch.strip()
+            if branch.startswith("* "):
+                # Strip '* '
+                branch = branch[2:]
+                self.currentBranch = branch
+            self.branches.append(branch)
+
+    def status(self):
+        self.log.note(self.git.command("status"))
+
+    def _dependencies(self, pull, target):
+        dependencies = []
+        if pull:
+            dependencies.append("master")
+        if "-" in target:
+            parent = target.split("-",1)[0]
+            if parent != "master":
+                dependencies.append(parent)
+        dependencies.append(target)
+        return dependencies
+
+    def _getTarget(self, issue_data):
+        """
+            Find or infer the target milestone of the current issue
+
+            TODO remove the issue number argument, grab that from issue data instead
+        """
+        # Find the milestone set on github
+        milestone = issue_data.get('milestone', None)
+        # is the issue labeled as a hotfix on github?
+        is_hotfix = 'hotfix' in [label['name'] for label in issue_data['labels']]
+        if milestone is not None:
+            return milestone['title']
+        elif is_hotfix:
+            return "master"
+        else:
+            self.log.error("Checkout failed. Set a milestone or label issue #%s as a hotfix." % issue_data['number'])
+            exit(1)
+
+    def _preAdd(self, *args):
+        self.setUp()
+        if not args:
+            self.log.error("Please specify files to add")
+            exit(1)
+        else:
+            self._requireIssue()
+            self.add(args[-1], args[:-1])
+
+    def _preCommit(self, *args):
+        self.setUp()
+        if not args:
+            self.log.error("Please supply a commit message")
+            exit(1)
+        else:
+            self._requireIssue()
+            self.commit(args[-1], args[:-1])
+
+    def _preClose(self, *args):
+        self._preNoArgs("close", *args)
+
+    def _preCheckout(self, *args):
+        self.setUp()
+        no_pull = ("--no-pull" in args)
+        issue_number = args[-1]
+        try:
+            # Make sure last argument is an integer
+            issue_number_int = int(issue_number)
+        except ValueError:
+            self.log.note("Usage: git311 checkout [--no-pull] <issue-number>")
+            exit(1)
+        self.checkout(issue_number, not no_pull)
+
+    def _preNoArgs(self, k, *args):
+        """
+            Generic prereq function for commands that do not take arguments.
+            Ensure that we're on an issue branch and that the user didn't pass
+            unnecessary arguments, then call the continuation denoted by [k].
+        """
+        self.setUp()
+        if len(args) > 1:
+            self.log.warn("'git311 %s' takes no arguments" % k)
+        self._requireIssue()
+        self.push(True)
+        getattr(self, k)()
+
+    def _preReview(self, *args):
+        self._preNoArgs("review", *args)
+
+    def _requireIssue(self):
+        if not self.issue:
+            self.log.error("Must be on an issue branch to %s" % k)
+            exit(1)
+    
+    COMMANDS = {
+        "add": _preAdd,
+        "commit": _preCommit,
+        "close": _preClose,
+        "checkout": _preCheckout,
+        "review": _preReview,
+        "status": status,
+    }
+
+if __name__ == "__main__":
+    config = ConfigParser(INI_FILE).to_dict()
+    Work(config).run(sys.argv[1:])
