@@ -2,7 +2,7 @@ github-cli
 ==========
 
 My favorite command line interface for working with github.
-Wraps ye ordinary git commands to support a branching git repository.
+Wraps ye ordinary git commands to support a nice branching git repository that harnesses the awesome power of github.
 
 # Install
 Just stick a copy of the `git-cli` script and `my-repo.ini` file into your repo.
@@ -11,7 +11,7 @@ Make new labels "hotfix", "pending-review", and "resolved" on github.
 Now you can execute the script using the commands detailed below.
 
 # The short story
-Workflow ought to be:
+After you install this script, your workflow ought to be:
 * Create an issue on github, assign it to a milestone branch
 * `git-cli checkout <issue-number>`
 * Hack hack hack. `git add -A`
@@ -35,6 +35,10 @@ For example, `mycommand [-o] <filename>` means that when you execute `mycommand`
 `mycommand foo.txt` would work, assuming "foo.txt" exists.
 Optionally, you may run `mycommand -o foo.txt`.
 (And who knows what'll happen if you try `mycommand --iluvfood foo.txt`.)
+
+## Status
+`git-cli status` is exactly the same as git status, except it prints blue text.
+Maybe someday `git-cli` by itself will print out the git status too.
 
 ## Checkout
 ### Usage
@@ -131,5 +135,6 @@ Just use `git-cli close` and sleep better at night.
 * Vincent Driessen's [Git branching model](http://nvie.com/posts/a-successful-git-branching-model/)
 
 # One more thing
-Don't forget to add your .ini file to the gitignore
+Don't forget to add your .ini file to the gitignore. Have fun.
+<!-- Ben Greenman 2013-09-02 -->
 
