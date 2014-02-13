@@ -54,8 +54,8 @@ If the inferred milestone is master, the checkout will fail unless the issue is 
 Otherwise, command checks out the appropriate branch, creating it locally if it did not previously exist, and then checks out the issue branch. 
 
 ### Replaces
-Normally one would use `git checkout <branch-name>` to switch branches and `git checkout -b <branch-name>` to create a new branch and switch to it.
-Git does not provide any way of pulling in existing refs when you check out a branch, so you'd have to take care of that manually with a bunch of calls to `git fetch` and `git merge`.
+Normally you'd use `git checkout <branch-name>` to switch branches and `git checkout -b <branch-name>` to create a new branch and switch to it.
+Git does not provide any way of pulling in existing refs when you check out a branch, so you'd have to take care of that manually with calls to `git fetch` and `git merge`.
 
 ## Add
 ### Usage
