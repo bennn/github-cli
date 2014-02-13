@@ -419,6 +419,7 @@ class Work:
         "checkout": _preCheckout,
         "refresh": refresh,
         "review": _preReview,
+        "st": status, # Everyone loves this alias, right?
         "status": status,
     }
 
