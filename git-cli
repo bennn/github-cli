@@ -126,25 +126,34 @@ class Work:
 
     def add(self, pattern, options=[]):
         """
-            Do a find for the filename before adding. 
+            Search for files matching prefix `pattern` or, if `pattern` is a git catchall, everything.
         """
         added = False
-        found_str = subprocess.check_output("find . -name '%s*'" % pattern, shell=True)
         files_added = []
-        for fname in found_str.split("\n"):
-            try:
-                if fname: 
+        if pattern in ["-A", "-u", "."]:
+            # Revert to github's behavior
+            status_str = self.git.command("status")
+            changed = "Changes not staged for commit:" in status_str
+            untracked = "Untracked files:" in status_str
+            # Decide based on git's behavior, read from here: http://stackoverflow.com/questions/572549/difference-between-git-add-a-and-git-add?rq=1
+            if ((pattern in [".", "-A"]) and (changed or untracked)) or ((pattern == "-u") and changed):
+                added = True
+                self.git.command("add %s" % pattern)
+        else:
+            # Use argument `pattern` to find files.
+            found_str = subprocess.check_output("find . -name '%s*'" % pattern, shell=True)
+            files_added = []
+            for fname in (x for x in found_str.split("\n") if x):
+                try:
                     self.git.command("add %s %s" % (" ".join(options), fname))
                     files_added.append(fname)
                     added = True
-            except:
-                # Do not fail on failed attempt to add a file. Just ignore it.
-                pass
-        if added:
-            self.log.success("Successfully staged the changes to the following files:")
-            self.log.note("> %s" % "\n> ".join(files_added))
-        else:
-            self.log.note("Did not add anything")
+                except:
+                    # Do not fail on failed attempt to add a file. Just ignore it.
+                    pass
+        # Check if we added anything
+        if not added:
+            self.log.warn("Did not find any files to add")
 
     def commit(self, message, options=[]):
         """
@@ -320,6 +329,7 @@ class Work:
             Find or infer the target milestone of the current issue
         """
         # Find the milestone set on github
+        print("HELLLO THERE ISSUE DATA IS %s" % issue_data)
         milestone = issue_data.get('milestone', None)
         # is the issue labeled as a hotfix on github?
         is_hotfix = 'hotfix' in [label['name'] for label in issue_data['labels']]
