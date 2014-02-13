@@ -55,7 +55,20 @@ class Git:
                 # If not trying to recover, do nothing, let the caller finish its routine.
                 self.log.warn("Encountered error, checking out current branch")
                 self.command("checkout %s" % self.currentBranch, attemptRecovery=False)
-                self.log.error("Failed to execute 'git %s'\nMake sure 'github.home' is properly set in the .ini" % cmd)
+                self.handleError(cmd)
+
+    def handleError(self, cmd):
+        """
+            Attempt to give descriptive error message based on the result of 'git status'
+        """
+        status_str = self.command("status")
+        if "You have unmerged paths" in status_str:
+            self.log.error("Merge conflict detected. Mark resolution and try again.")
+        elif False:
+            pass
+        else:
+            # Generic error
+            self.log.error("Failed to execute 'git %s'\nMake sure 'github.home' is properly set in the .ini" % cmd)
 
 class GithubApi:
     """
@@ -163,7 +176,8 @@ class Work:
         commit_message = "\"[#%s] %s\"" % (self.issue, message)
         # Check if there's anything to commit
         status_str = self.git.command("status")
-        if not ("Changes to be committed:" in status_str):
+        if (not ("Changes to be committed:" in status_str)) and ("conclude merge" in status_str):
+            # Nothing staged to commit, not in middle of a merge
             self.log.error("Nothing to commit (working directory clean)")
         # Otherwise, proceed with commit
         self.log.note("About to commit:") 
