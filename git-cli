@@ -329,7 +329,6 @@ class Work:
             Find or infer the target milestone of the current issue
         """
         # Find the milestone set on github
-        print("HELLLO THERE ISSUE DATA IS %s" % issue_data)
         milestone = issue_data.get('milestone', None)
         # is the issue labeled as a hotfix on github?
         is_hotfix = 'hotfix' in [label['name'] for label in issue_data['labels']]
