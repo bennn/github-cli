@@ -161,6 +161,11 @@ class Work:
             Automatically prepend issue number to commit message
         """
         commit_message = "\"#%s %s\"" % (self.issue, message)
+        # Check if there's anything to commit
+        status_str = self.git.command("status")
+        if not ("Changes to be committed:" in status_str):
+            self.log.error("Nothing to commit (working directory clean)")
+        # Otherwise, proceed with commit
         self.log.note("About to commit:") 
         print(commit_message)
         self.log.note("to %s. Is this correct? (y / n)" % (self.git.currentBranch))
