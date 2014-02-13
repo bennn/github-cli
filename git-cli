@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 import json, os, requests, sys, subprocess
 
+# Dear user: this is the name we call your bot
+CMD_NAME = "github-cli"
 # Dear user: change this path to whatever/wherever you want your .ini
 INI_FILE = "./myrepo.ini"
 
@@ -50,12 +52,10 @@ class Git:
             return "\n".join(line for line in output.split("\n") if line)
         except subprocess.CalledProcessError as cpe: 
             if attemptRecovery:
+                # If not trying to recover, do nothing, let the caller finish its routine.
                 self.log.warn("Encountered error, checking out current branch")
                 self.command("checkout %s" % self.currentBranch, attemptRecovery=False)
-                self.log.error("Failed to execute 'git %s'" % cmd)
-            else:
-                # Do nothing, let the caller finish its routine.
-                pass
+                self.log.error("Failed to execute 'git %s'\nMake sure 'github.home' is properly set in the .ini" % cmd)
 
 class GithubApi:
     """
@@ -70,6 +70,7 @@ class GithubApi:
         self.api_url = "https://api.github.com/repos/%s/%s" % \
             (config['github.owner'], config['github.repo'])
         self.github_token = config['github.token']
+        self.log = Log()
     
     def eraseLabel(self, issue_number, label):
         url = "%s/issues/%s/labels/%s" % (self.api_url, issue_number, label)
@@ -97,7 +98,7 @@ class GithubApi:
         if 200 <= response.status_code <= 299:
             return response.json()
         else:
-            print("ERROR: Failed to get response from github api for url %s" % url)
+            self.log.error("Failed to get response from github api for url %s.\nMake sure 'github.owner', 'github.repo', and 'github.token' are properly set in the .ini" % url)
 
     def postLabel(self, issue_number, data):
         url = "%s/issues/%s/labels" % (self.api_url, issue_number)
@@ -164,7 +165,7 @@ class Work:
         print(commit_message)
         self.log.note("to %s. Is this correct? (y / n)" % (self.git.currentBranch))
         answer = raw_input()
-        while answer not in ['y', 'n']:
+        while answer.lower() not in ['y', 'n']:
             print("Please answer 'y' or 'n'")
             answer = raw_input()
         if answer == 'y':
@@ -179,7 +180,7 @@ class Work:
         """
         # Merge
         self.git.command("checkout %s" % self.target)
-        self.git.command("merge --no-ff -m \"MERGING #%s INTO %s MADE BY git311\" %s" % (self.issue, self.target, self.git.currentBranch))
+        self.git.command("merge --no-ff -m \"MERGING #%s INTO %s MADE BY %s\" %s" % (self.issue, self.target, CMD_NAME, self.git.currentBranch))
         # Manage labels
         self.api.eraseLabel(self.issue, "pending-review")
         self.api.postLabel(self.issue, data=['resolved'])
@@ -311,7 +312,7 @@ class Work:
 
     def _checkNumArgs(self, numExpected, args):
         if numExpected != len(args):
-            self.log.warn("'git311 %s' expected %s arguments, received '%s'" % (self.command, numExpected, list(args)))
+            self.log.warn("'%s %s' expected %s arguments, received '%s'" % (CMD_NAME, self.command, numExpected, list(args)))
 
     def _dependencies(self, pull, target):
         dependencies = []
@@ -370,7 +371,7 @@ class Work:
             # Make sure last argument is an integer
             issue_number_int = int(issue_number)
         except ValueError:
-            self.log.error("Usage: git311 checkout [--no-pull] <issue-number>")
+            self.log.error("Usage: %s checkout [--no-pull] <issue-number>" % cmd_name)
         self.checkout(issue_number, not no_pull)
 
     def _preReview(self, *args):
