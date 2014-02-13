@@ -64,8 +64,6 @@ class Git:
         status_str = self.command("status")
         if "You have unmerged paths" in status_str:
             self.log.error("Merge conflict detected. Mark resolution and try again.")
-        elif False:
-            pass
         else:
             # Generic error
             self.log.error("Failed to execute 'git %s'\nMake sure 'github.home' is properly set in the .ini" % cmd)
@@ -238,7 +236,6 @@ class Work:
         self.log.note("Target: %s" % target)
 
     def pull(self, full, target):
-        # TODO is 'target' ever NOT the current branch?
         previous = None
         for issue in self._dependencies(full, target):
             self.log.note("Merging with origin/%s..." % issue)
