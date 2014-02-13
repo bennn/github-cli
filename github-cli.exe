@@ -160,7 +160,7 @@ class Work:
         """
             Automatically prepend issue number to commit message
         """
-        commit_message = "\"#%s %s\"" % (self.issue, message)
+        commit_message = "\"[#%s] %s\"" % (self.issue, message)
         # Check if there's anything to commit
         status_str = self.git.command("status")
         if not ("Changes to be committed:" in status_str):
