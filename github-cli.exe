@@ -246,6 +246,14 @@ class Work:
 
     def printHelp(self):
         self.log.note("Usage: git6820 <command> [options] <params>")
+
+    def refresh(self, *args):
+        """
+            Sync with origin and master
+        """
+        self._checkNumArgs(0, args)
+        self.setUp()
+        self.pull(True, self.git.currentBranch)
         
     def review(self):
         """
@@ -317,7 +325,7 @@ class Work:
 
     def _checkNumArgs(self, numExpected, args):
         if numExpected != len(args):
-            self.log.warn("'%s %s' expected %s arguments, received '%s'" % (CMD_NAME, self.command, numExpected, list(args)))
+            self.log.warn("'%s %s' expected %s arguments, received %s" % (CMD_NAME, self.command, numExpected, list(args)))
 
     def _dependencies(self, pull, target):
         dependencies = []
@@ -363,8 +371,8 @@ class Work:
 
     def _preClose(self, *args):
         self._checkNumArgs(0, args)
-        self.setUp()
         self._requireIssue()
+        self.setUp()
         self.push(True)
         self.close()
 
@@ -376,13 +384,13 @@ class Work:
             # Make sure last argument is an integer
             issue_number_int = int(issue_number)
         except ValueError:
-            self.log.error("Usage: %s checkout [--no-pull] <issue-number>" % cmd_name)
+            self.log.error("Usage: %s checkout [--no-pull] <issue-number>" % CMD_NAME)
         self.checkout(issue_number, not no_pull)
 
     def _preReview(self, *args):
         self._checkNumArgs(0, args)
-        self.setUp()
         self._requireIssue()
+        self.setUp()
         self.push(True)
         self.review()
 
@@ -395,6 +403,7 @@ class Work:
         "commit": _preCommit,
         "close": _preClose,
         "checkout": _preCheckout,
+        "refresh": refresh,
         "review": _preReview,
         "status": status,
     }
