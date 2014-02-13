@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3.3
 import json, os, requests, sys, subprocess
 
 # Dear user: this is the name we call your bot
@@ -46,9 +46,9 @@ class Git:
 
     def command(self, cmd, attemptRecovery=True):
         fullCommand = "git --git-dir=%s/.git %s" % (self.git_dir, cmd)
-        print "> %s" % fullCommand
+        print("> %s" % fullCommand)
         try: 
-            output = subprocess.check_output(fullCommand, shell=True)
+            output = str(subprocess.check_output(fullCommand, shell=True),encoding="utf-8")
             return "\n".join(line for line in output.split("\n") if line)
         except subprocess.CalledProcessError as cpe: 
             if attemptRecovery:
@@ -155,7 +155,7 @@ class Work:
                 self.git.command("add %s" % pattern)
         else:
             # Use argument `pattern` to find files.
-            found_str = subprocess.check_output("find . -name '%s*'" % pattern, shell=True)
+            found_str = str(subprocess.check_output("find . -name '%s*'" % pattern, shell=True),encoding="utf-8")
             files_added = []
             for fname in (x for x in found_str.split("\n") if x):
                 try:
@@ -176,17 +176,17 @@ class Work:
         commit_message = "\"[#%s] %s\"" % (self.issue, message)
         # Check if there's anything to commit
         status_str = self.git.command("status")
-        if (not ("Changes to be committed:" in status_str)) and ("conclude merge" in status_str):
+        if (not ("Changes to be committed:" in status_str)) or ("conclude merge" in status_str):
             # Nothing staged to commit, not in middle of a merge
             self.log.error("Nothing to commit (working directory clean)")
         # Otherwise, proceed with commit
         self.log.note("About to commit:") 
         print(commit_message)
         self.log.note("to %s. Is this correct? (y / n)" % (self.git.currentBranch))
-        answer = raw_input()
-        while answer.lower() not in ['y', 'n']:
+        answer = input().lower()
+        while answer not in ['y', 'n']:
             print("Please answer 'y' or 'n'")
-            answer = raw_input()
+            answer = input().lower()
         if answer == 'y':
             self.git.command("commit %s -m %s" % (" ".join(options), commit_message))
             self.log.success("Success!")
@@ -385,8 +385,8 @@ class Work:
 
     def _preClose(self, *args):
         self._checkNumArgs(0, args)
-        self._requireIssue()
         self.setUp()
+        self._requireIssue()
         self.push(True)
         self.close()
 
@@ -403,8 +403,8 @@ class Work:
 
     def _preReview(self, *args):
         self._checkNumArgs(0, args)
-        self._requireIssue()
         self.setUp()
+        self._requireIssue()
         self.push(True)
         self.review()
 

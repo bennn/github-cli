@@ -10,6 +10,11 @@ Fill out the fields in the .ini and optionally rename these files to something m
 Make new labels "hotfix", "pending-review", and "resolved" on github.
 Now you can execute the script using the commands detailed below.
 
+I needed this to install requests:
+`pip-3.3 install git+https://github.com/kennethreitz/requests`
+and then this to include it to path:
+`/usr/local/lib/python3.3/site-packages`
+
 # The short story
 After you install this script, your workflow ought to be:
 * Create an issue on github, assign it to a milestone branch
