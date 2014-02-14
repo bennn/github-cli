@@ -19,7 +19,7 @@ and then this to include it to path:
 After you install this script, your workflow ought to be:
 * Create an issue on github, assign it to a milestone branch
 * `git-cli checkout <issue-number>`
-* Hack hack hack. `git add -A`
+* Hack hack hack. `git-cli add -A`
 * `git-cli commit "message"`
 * `git-cli review`
 * Revise, rehack
@@ -44,6 +44,9 @@ Optionally, you may run `mycommand -o foo.txt`.
 ## Status
 `git-cli status` is exactly the same as git status, except it prints blue text.
 Maybe someday `git-cli` by itself will print out the git status too.
+
+## Refresh
+`git-cli refresh` pulls in new changes to your branch and to master.
 
 ## Checkout
 ### Usage
